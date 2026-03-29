@@ -7,6 +7,10 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.pipeline import Pipeline
 from sklearn.decomposition import PCA
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from scipy.stats import pearsonr
+from sklearn.utils import resample
+from scipy.stats import spearmanr
 
 def create_stratify_bins(series, num_bins=4):
     """Create bins for stratification based on the distribution of a numeric series (e.g., age)
@@ -34,35 +38,38 @@ def data_split(df, stratify_col=None, test_size=0.2, seed=42):
     )
     return train_set, val_set
 
+from sklearn.preprocessing import FunctionTransformer 
+
+from sklearn.preprocessing import FunctionTransformer
+
 def get_preprocessing_pipeline(numeric_features, categorical_features, n_components=None):
-    """
-    Creation of a preprocessing pipeline for both numeric and categorical features.
-     - Numeric features: Imputation with median, Standard Scaling and PCA for dimensionality reduction (n_components can be set based on the Elbow Plot) 
-     - PCA is included in the numeric pipeline to ensure that it is applied only to the numeric features after imputation and scaling
-     - Categorical features: Imputation with most frequent + One-Hot Encoding (drop first to avoid multicollinearity)
-     - ColumnTransformer to combine both pipelines  
-    """
-    
+    # Ορίζουμε το βήμα του PCA
+    # Αν το n_components είναι 'passthrough', το βήμα 'pca' δεν θα κάνει τίποτα
+    if n_components == 'passthrough':
+        pca_step = ('pca', FunctionTransformer(lambda x: x)) 
+    else:
+        pca_step = ('pca', PCA(n_components=n_components, random_state=42))
+
     # 1. Pipeline for CpG features (Numeric)
     numeric_transformer = Pipeline(steps=[
-        ('imputer', SimpleImputer(strategy='median')), # Missing values replaced with Median 
-        ('scaler', StandardScaler()), 
-        ('pca', PCA(n_components=n_components, random_state=42))                                    # Scaling with StandardScaler 
+        ('imputer', SimpleImputer(strategy='median')),
+        ('scaler', StandardScaler()),
+        pca_step # Εδώ μπαίνει δυναμικά είτε το PCA είτε το "κενό" βήμα
     ])
 
-    # 2. Pipeline for Categorical features (Ethnicity&Sex)
+    # 2. Pipeline for Categorical features
     categorical_transformer = Pipeline(steps=[
-        ('imputer', SimpleImputer(strategy='most_frequent')), # Keep this to handle any potential missing values in categorical features in the future
+        ('imputer', SimpleImputer(strategy='most_frequent')),
         ('onehot', OneHotEncoder(drop='first', sparse_output=False)) 
     ])
 
-    # 3. ColumnTransformer units 1 & 2
+    # 3. ColumnTransformer
     preprocessor = ColumnTransformer(
         transformers=[
             ('num', numeric_transformer, numeric_features),
             ('cat', categorical_transformer, categorical_features)
         ],
-        remainder='drop' # Ensure that no other column is calculated (e.g. sex, sample_id)
+        remainder='drop'
     )
     
     return preprocessor
@@ -82,3 +89,111 @@ def get_split_stats(name, df_split):
         'Sex Balance (% Male)': f"{(df_split['sex'] == 'M').mean()*100:.1f}%"
     }
     return stats
+
+def evaluate_with_bootstrap(y_true, y_pred, n_resamples=1000, seed=42):
+    """
+    Calculation of RMSE, MAE, R2 και Pearson r with 95% Confidence Intervals 
+    using bootstrap resampling only in the predictions of the validation set to assess the stability of the model's performance metrics.
+     - y_true: The true target values
+    - y_pred: The predicted target values
+    - n_resamples: The number of bootstrap resamples to perform (default is 1000)
+    - seed: Random seed for reproducibility
+     - Returns: A dictionary with the mean and 95% CI for each metric
+    """
+    metrics = {'rmse': [], 'mae': [], 'r2': [], 'pearson_r': []}
+    
+    # Transformation to numpy arrays for certainty in indices
+    y_true = np.array(y_true)
+    y_pred = np.array(y_pred)
+
+    for i in range(n_resamples):
+        # Bootstrap Resampling  with replacement of the predictions
+        # We use seed+i to have different but reproducible samples
+        y_t_boot, y_p_boot = resample(y_true, y_pred, replace=True, random_state=seed + i)
+        
+        # Calculation of the 4 metrics
+        metrics['rmse'].append(np.sqrt(mean_squared_error(y_t_boot, y_p_boot)))
+        metrics['mae'].append(mean_absolute_error(y_t_boot, y_p_boot))
+        metrics['r2'].append(r2_score(y_t_boot, y_p_boot))
+        
+        corr, _ = pearsonr(y_t_boot, y_p_boot)
+        metrics['pearson_r'].append(corr)
+    
+    # Calculation of Mean and 95% CI (2.5th and 97.5th percentile)
+    results = {}
+    for m in metrics:
+        mean_val = np.mean(metrics[m])
+        lower = np.percentile(metrics[m], 2.5)
+        upper = np.percentile(metrics[m], 97.5)
+        results[m] = (mean_val, lower, upper)
+        
+    return results
+
+def calculate_regression_metrics(y_true, y_pred):
+    """Υπολογίζει τις 4 βασικές μετρικές."""
+    corr, _ = pearsonr(y_true, y_pred)
+    return {
+        'rmse': np.sqrt(mean_squared_error(y_true, y_pred)),
+        'mae': mean_absolute_error(y_true, y_pred),
+        'r2': r2_score(y_true, y_pred),
+        'pearson_r': corr
+    }
+
+def get_bootstrap_samples(y_true, y_pred, n_resamples=1000, seed=42):
+    """Παράγει μόνο τα δείγματα (samples) των μετρικών."""
+    y_true, y_pred = np.array(y_true), np.array(y_pred)
+    boot_results = {m: [] for m in ['rmse', 'mae', 'r2', 'pearson_r']}
+    
+    for i in range(n_resamples):
+        yt_b, yp_b = resample(y_true, y_pred, replace=True, random_state=seed + i)
+        metrics = calculate_regression_metrics(yt_b, yp_b)
+        for m in metrics:
+            boot_results[m].append(metrics[m])
+            
+    return boot_results
+
+def calculate_confidence_intervals(samples, confidence=95):
+    """Υπολογίζει Mean και CI για μια λίστα από samples."""
+    lower_p = (100 - confidence) / 2
+    upper_p = 100 - lower_p
+    return (np.mean(samples), np.percentile(samples, lower_p), np.percentile(samples, upper_p))
+
+
+def perform_stability_selection(X, y, n_subsamples=50, sub_size=0.8, top_k=200, threshold=0.5):
+    """
+    Implements Stability Selection based on Spearman Correlation.
+    """
+    n_samples = X.shape[0]
+    n_features = X.shape[1]
+    feature_names = X.columns if hasattr(X, 'columns') else np.arange(n_features)
+    
+    # Matrix for counting how many times each feature was selected
+    selection_counts = np.zeros(n_features)
+    
+    sample_size = int(n_samples * sub_size)
+    
+    for i in range(n_subsamples):
+        # 1. Subsample without replacement
+        indices = np.random.choice(n_samples, size=sample_size, replace=False)
+        X_sub = X[indices]
+        y_sub = y[indices]
+        
+        # 2. Calculation of Spearman correlation for each feature
+        correlations = []
+        for j in range(n_features):
+            score, _ = spearmanr(X_sub[:, j], y_sub)
+            correlations.append(abs(score))
+        
+        # 3. Ordering and selection of the top 200
+        correlations = np.array(correlations)
+        # Take the indices of the 200 largest values
+        top_indices = np.argsort(correlations)[-top_k:]
+        selection_counts[top_indices] += 1
+        
+    # Conversion to frequency (0.0 to 1.0)
+    selection_frequencies = selection_counts / n_subsamples
+    
+    # Selection of features with frequency > threshold
+    stable_features_indices = np.where(selection_frequencies > threshold)[0]
+    
+    return stable_features_indices, selection_frequencies
