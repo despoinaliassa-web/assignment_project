@@ -5,16 +5,26 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.pipeline import Pipeline
+from sklearn.decomposition import PCA
 
-def create_stratify_bins(series, num_bins=3):
+def create_stratify_bins(series, num_bins=4):
+    """Create bins for stratification based on the distribution of a numeric series (e.g., age)
+     - series: The numeric series to be binned (e.g., age)
+    - num_bins: The number of bins to create (default is 4 for quartiles)
+     - Returns: An array of bin labels corresponding to each value in the series
+    """
     bins = np.linspace(series.min(), series.max(), num_bins + 1)
     # digitize: returns which bin each value belongs to
     return np.digitize(series, bins[:-1])
 
 def data_split(df, stratify_col=None, test_size=0.2, seed=42):
     """
-    Γενική συνάρτηση split. 
-    Δέχεται έτοιμο το stratify_col (array-like).
+    Split the data into training and validation sets, ensuring that the distribution of the stratify_col is preserved in both sets
+     - stratify_col: The column used for stratification (e.g., age bins)
+     - test_size: Proportion of the dataset to include in the validation split
+     - seed: Random seed for reproducibility 
+        - Returns: train_set, val_set
     """
     train_set, val_set = train_test_split(
         df, 
@@ -24,22 +34,25 @@ def data_split(df, stratify_col=None, test_size=0.2, seed=42):
     )
     return train_set, val_set
 
-def get_preprocessing_pipeline(numeric_features, categorical_features):
+def get_preprocessing_pipeline(numeric_features, categorical_features, n_components=None):
     """
-    Δημιουργεί το αντικείμενο προεπεξεργασίας σύμφωνα με τις οδηγίες:
-    - Numeric (CpGs): Median Imputation & StandardScaler (σε Pipeline)
-    - Categorical (Ethnicity): Most Frequent Imputation & One-Hot Encoding
+    Creation of a preprocessing pipeline for both numeric and categorical features.
+     - Numeric features: Imputation with median, Standard Scaling and PCA for dimensionality reduction (n_components can be set based on the Elbow Plot) 
+     - PCA is included in the numeric pipeline to ensure that it is applied only to the numeric features after imputation and scaling
+     - Categorical features: Imputation with most frequent + One-Hot Encoding (drop first to avoid multicollinearity)
+     - ColumnTransformer to combine both pipelines  
     """
     
     # 1. Pipeline for CpG features (Numeric)
     numeric_transformer = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy='median')), # Missing values replaced with Median 
-        ('scaler', StandardScaler())                   # Scaling with StandardScaler 
+        ('scaler', StandardScaler()), 
+        ('pca', PCA(n_components=n_components, random_state=42))                                    # Scaling with StandardScaler 
     ])
 
     # 2. Pipeline for Categorical features (Ethnicity&Sex)
     categorical_transformer = Pipeline(steps=[
-        ('imputer', SimpleImputer(strategy='most_frequent')),
+        ('imputer', SimpleImputer(strategy='most_frequent')), # Keep this to handle any potential missing values in categorical features in the future
         ('onehot', OneHotEncoder(drop='first', sparse_output=False)) 
     ])
 
@@ -55,6 +68,11 @@ def get_preprocessing_pipeline(numeric_features, categorical_features):
     return preprocessor
 
 # Statistics for each split
+"""- n (Samples): The number of samples in the split   
+    - Age (Mean ± Std): The mean and standard deviation of the age distribution in the split
+    - Age Range: The minimum and maximum age in the split
+    - Sex Balance (%  Male): The percentage of male samples in the split (calculated as the proportion of samples where sex is 'M')
+"""
 def get_split_stats(name, df_split):
     stats = {
         'Split': name,
