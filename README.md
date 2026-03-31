@@ -1,28 +1,29 @@
-# Epigenetic Age Prediction Project
+# Epigenetic Age Predictor (DNA Methylation Clock)
 
-This repository contains a machine learning pipeline for predicting biological age using DNA methylation data (CpG sites) and demographic metadata.
-
-## Project Overview
-The goal is to develop and evaluate an **Epigenetic Clock** based on 1000 selected CpG features and categorical metadata (Sex and Ethnicity) from 456 samples.
+This project develops a computational model (Epigenetic Clock) to predict biological age using DNA methylation data (CpG sites)
 
 ## Project Structure
-*   `notebooks/`: Jupyter Notebooks for Exploratory Data Analysis (EDA) and Model Training.
-*   `src/`: Contains `functions.py` with reusable preprocessing and modeling logic.
-*   `figures/`: Visualizations generated during EDA (150 dpi resolution).
-*   `requirements.txt`: List of dependencies (scikit-learn, pandas, seaborn, etc.).
 
-## Methodology & Constraints
-*   **Preprocessing:** One-Hot Encoding for categorical data and Robust Scaling for DNA methylation.
-*   **Data Leakage Prevention:** All parameters (imputation, scaling) are fitted **only** on the training split and applied to validation/evaluation sets.
-*   **Reproducibility:** Constant `seed=42` used across all experiments.
-*   **Evaluation:** Metrics include 95% Confidence Intervals (CI) estimated via 1000-fold resampling with replacement.
+* `notebooks/`
+    * `preprocessing.ipynb`: Data cleaning, Data Preprocessing, EDA
+    * `models.ipynb`: Training of regression models and feature selection 
+* `src/`
+    * `functions.py`: Shared functions for metrics, bootstrap evaluation, and visualization
+* `figures/`: Plots (Venn, correlation plots, feature importance)
+* `results/`: Results tables and model comparisons in CSV format
 
-## Key Visualizations
-Below is a sample distribution of the development set:
+## 🚀 Work Progress
 
-![Gender and Ethnicity Distribution](figures/Correlation%20gender-ethnicity.png)
+### Task 1 & 2: Preprocessing & Initial Selection
+* Data splitting, handling missing values, data scaling
+* Training and evaluation of Regression models (Ordinary Least Squares (OLS) Linear Regression, ElasticNet Regression,Support Vector Regression (SVR) with RBF Kernel, Bayesian Ridge Regression)
 
-## 🚀 Getting Started
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
+### Task 3: Feature Selection & Evaluation
+* Method Comparison : 
+    * Stability Selection (185 features)
+    * mRMR Selection (150 features) 
+* Use of **Bootstrap (1000 resamples)** to calculate 95% confidence intervals (CI)
+
+## 📈 Next Steps
+* **Task 4:** Hyperparameter tuning to minimize prediction error
+* Final evaluation on the Evaluation set

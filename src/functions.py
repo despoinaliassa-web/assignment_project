@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import FunctionTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
@@ -38,23 +39,20 @@ def data_split(df, stratify_col=None, test_size=0.2, seed=42):
     )
     return train_set, val_set
 
-from sklearn.preprocessing import FunctionTransformer 
 
-from sklearn.preprocessing import FunctionTransformer
-
-def get_preprocessing_pipeline(numeric_features, categorical_features, n_components=None):
-    # Ορίζουμε το βήμα του PCA
-    # Αν το n_components είναι 'passthrough', το βήμα 'pca' δεν θα κάνει τίποτα
+def get_preprocessing_pipeline(numeric_features, categorical_features, n_components=None, seed=42):
+    # Define the PCA step
+    # If n_components is 'passthrough', the 'pca' step will do nothing
     if n_components == 'passthrough':
         pca_step = ('pca', FunctionTransformer(lambda x: x)) 
     else:
-        pca_step = ('pca', PCA(n_components=n_components, random_state=42))
+        pca_step = ('pca', PCA(n_components=n_components, random_state=seed))
 
     # 1. Pipeline for CpG features (Numeric)
     numeric_transformer = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy='median')),
         ('scaler', StandardScaler()),
-        pca_step # Εδώ μπαίνει δυναμικά είτε το PCA είτε το "κενό" βήμα
+        pca_step # here we dynamically include either PCA or the "passthrough" step
     ])
 
     # 2. Pipeline for Categorical features
@@ -94,7 +92,7 @@ def evaluate_with_bootstrap(y_true, y_pred, n_resamples=1000, seed=42):
     """
     Calculation of RMSE, MAE, R2 και Pearson r with 95% Confidence Intervals 
     using bootstrap resampling only in the predictions of the validation set to assess the stability of the model's performance metrics.
-     - y_true: The true target values
+     - y_true: The true target values of the validation set
     - y_pred: The predicted target values
     - n_resamples: The number of bootstrap resamples to perform (default is 1000)
     - seed: Random seed for reproducibility
@@ -130,7 +128,7 @@ def evaluate_with_bootstrap(y_true, y_pred, n_resamples=1000, seed=42):
     return results
 
 def calculate_regression_metrics(y_true, y_pred):
-    """Υπολογίζει τις 4 βασικές μετρικές."""
+    """Calculation of the 4 basic metrics"""
     corr, _ = pearsonr(y_true, y_pred)
     return {
         'rmse': np.sqrt(mean_squared_error(y_true, y_pred)),
@@ -140,7 +138,7 @@ def calculate_regression_metrics(y_true, y_pred):
     }
 
 def get_bootstrap_samples(y_true, y_pred, n_resamples=1000, seed=42):
-    """Παράγει μόνο τα δείγματα (samples) των μετρικών."""
+    """Creates only the samples of the metrics."""
     y_true, y_pred = np.array(y_true), np.array(y_pred)
     boot_results = {m: [] for m in ['rmse', 'mae', 'r2', 'pearson_r']}
     
@@ -153,13 +151,13 @@ def get_bootstrap_samples(y_true, y_pred, n_resamples=1000, seed=42):
     return boot_results
 
 def calculate_confidence_intervals(samples, confidence=95):
-    """Υπολογίζει Mean και CI για μια λίστα από samples."""
+    """Calculates Mean and Confidence Intervals for a list of samples."""
     lower_p = (100 - confidence) / 2
     upper_p = 100 - lower_p
     return (np.mean(samples), np.percentile(samples, lower_p), np.percentile(samples, upper_p))
 
 
-def perform_stability_selection(X, y, n_subsamples=50, sub_size=0.8, top_k=200, threshold=0.5):
+def perform_stability_selection(X, y, n_subsamples=50, sub_size=0.8, top_k=200, threshold=0.5, seed=42):
     """
     Implements Stability Selection based on Spearman Correlation.
     """
