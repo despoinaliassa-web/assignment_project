@@ -22,6 +22,6 @@ This project develops a computational model (Epigenetic Clock) to predict biolog
     * mRMR Selection (150 features) 
 * Use of **Bootstrap (1000 resamples)** to calculate 95% confidence intervals (CI)
 
-## Next Steps
-* **Task 4:** Hyperparameter tuning to minimize prediction error
+### Task 4 : Hyperparameter Tuning & Final Evaluatio 
+* Hyperparameter tuning to minimize prediction error
 * Final evaluation on the Evaluation set
