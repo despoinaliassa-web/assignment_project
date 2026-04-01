@@ -12,6 +12,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from scipy.stats import pearsonr
 from sklearn.utils import resample
 from scipy.stats import spearmanr
+from sklearn.model_selection import RandomizedSearchCV
 
 def create_stratify_bins(series, num_bins=4):
     """Create bins for stratification based on the distribution of a numeric series (e.g., age)
@@ -195,3 +196,21 @@ def perform_stability_selection(X, y, n_subsamples=50, sub_size=0.8, top_k=200, 
     stable_features_indices = np.where(selection_frequencies > threshold)[0]
     
     return stable_features_indices, selection_frequencies
+
+
+def run_hyperparameter_tuning(model, param_dist, X, y, n_iter=40, seed=42):
+    """
+    Runs RandomizedSearchCV to find optimal hyperparameters 
+    """
+    search = RandomizedSearchCV(
+        model, 
+        param_distributions=param_dist, 
+        n_iter=n_iter, 
+        cv=5, 
+        scoring='neg_root_mean_squared_error', 
+        random_state=seed,
+        n_jobs=-1,
+        refit=True # automatic refit in full dev set
+    )
+    search.fit(X, y)
+    return search
